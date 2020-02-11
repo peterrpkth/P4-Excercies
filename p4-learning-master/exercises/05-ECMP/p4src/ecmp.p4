@@ -21,6 +21,7 @@ control MyVerifyChecksum(inout headers hdr, inout metadata meta) {
 control MyIngress(inout headers hdr,
                   inout metadata meta,
                   inout standard_metadata_t standard_metadata) {
+    
     action drop() {
         mark_to_drop();
     }
@@ -61,8 +62,19 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-    table ecmp_group_to_nhop {
+    
         //TODO 7: define the ecmp table, this table is only called when multiple hops are available
+    table ecmp_group_to_nhop {
+        key = {
+            meta.ecmp_group_id: exact;
+            meta.ecmp_hash: exact;
+        }
+        actions = {
+            set_nhop;
+            drop;
+        }
+        size = 10;
+        default_action = drop;  
     }
 
     table ipv4_lpm {
@@ -84,8 +96,17 @@ control MyIngress(inout headers hdr,
     }
 
     apply {
+
         //TODO 8: implement the ingress logic: check validities, apply first table, and if needed the second table.
-    }
+
+        if(hdr.ipv4.isValid()) {
+           switch (ipv4_lpm.apply().action_run) {
+                ecmp_group: {
+                    ecmp_group_to_nhop.apply();
+                }
+            }
+        }
+    }    
 }
 
 /*************************************************************************
