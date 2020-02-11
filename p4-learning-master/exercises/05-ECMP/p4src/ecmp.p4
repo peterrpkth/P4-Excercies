@@ -27,10 +27,38 @@ control MyIngress(inout headers hdr,
 
     action ecmp_group(bit<14> ecmp_group_id, bit<16> num_nhops){
         //TODO 6: define the ecmp_group action, here you need to hash the 5-tuple mod num_ports and safe it in metadata
+
+        hash(meta.ecmp_hash,
+	    HashAlgorithm.crc16,
+	    (bit<1>)0,
+	    { hdr.ipv4.srcAddr,
+	      hdr.ipv4.dstAddr,
+          hdr.tcp.srcPort,
+          hdr.tcp.dstPort,
+          hdr.ipv4.protocol},
+	    num_nhops);
+
+	    meta.ecmp_group_id = ecmp_group_id;
     }
 
     action set_nhop(macAddr_t dstAddr, egressSpec_t port) {
         //TODO 5: Define the set_nhop action. You can copy it from the previous exercise, they are the same.
+        /*Define the action set_nhop. This action takes 2 parameters: destination mac and egress port. Use the parameters
+         to set the destination mac and egress_spec. Set the source mac as the previous destination mac (this is not what a 
+         real L3 switch would do, we just do it for simplicity). Finally, decrease the packet's TTL by 1. This table is the 
+         same than the previous exercise. */
+        
+         //set the src mac address as the previous dst, this is not correct right?
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
+
+       //set the destination mac address that we got from the match in the table
+        hdr.ethernet.dstAddr = dstAddr;
+
+        //set the output port that we also get from the table
+        standard_metadata.egress_spec = port;
+
+        //decrease ttl by 1
+        hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
     table ecmp_group_to_nhop {
@@ -39,6 +67,20 @@ control MyIngress(inout headers hdr,
 
     table ipv4_lpm {
         //TODO 4: define the ip forwarding table
+        //Define a match-action table that matches the IP destination address of every packet and has three actions: set_nhop, ecmp_group, drop. 
+        //Set the drop action as default.
+
+        key = {
+            hdr.ipv4.dstAddr: lpm;
+        }
+        actions = {
+            set_nhop;
+            ecmp_group;
+            drop;
+            
+        }
+        size = 1024;
+        default_action = drop;
     }
 
     apply {
